@@ -29,7 +29,9 @@ def load_dummy_graph_data():
 
 def train_model():
     print("Loading data...")
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     x, y, edge_index = load_dummy_graph_data()
+    x, y, edge_index = x.to(device), y.to(device), edge_index.to(device)
     
     # Split into train/val/test (temporal split)
     # Since we have mock batched data, let's just split the batch dim
@@ -44,13 +46,14 @@ def train_model():
     baseline = PersistenceBaseline()
     
     # Current AQI is the last feature of the last period (let's assume feature 0 is AQI)
-    current_aqi_test = x_test[:, :, 0, -1]
+    current_aqi_test = x_test[:, :, 0, -1].cpu() # Move to CPU for baseline which might use numpy
+    y_test_cpu = y_test.cpu()
     y_pred_baseline = baseline.predict(current_aqi_test)
-    baseline_rmse = baseline.evaluate(y_test, y_pred_baseline)
+    baseline_rmse = baseline.evaluate(y_test_cpu, y_pred_baseline)
     print(f"Baseline RMSE (24h, 48h, 72h): {baseline_rmse.tolist()}")
     
     print("Training A3TGCN...")
-    model = A3TGCNModel(node_features=x.size(2), periods=x.size(3), hidden_channels=32)
+    model = A3TGCNModel(node_features=x.size(2), periods=x.size(3), hidden_channels=32).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
     criterion = torch.nn.MSELoss()
     
@@ -61,7 +64,6 @@ def train_model():
         out = model(x_train, edge_index)
         loss = criterion(out, y_train)
         loss.backward()
-        optimizer.sleep = 0
         optimizer.step()
         
         # Validation

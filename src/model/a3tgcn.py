@@ -20,12 +20,29 @@ class A3TGCNModel(torch.nn.Module):
         edge_index shape: (2, num_edges)
         edge_weight shape: (num_edges,)
         """
-        # A3TGCN expects x shape: [batch_size, num_nodes, in_channels, periods]
-        # So we just pass it directly.
-        h = self.tgnn(x, edge_index, edge_weight)
-        # h shape: [batch_size, num_nodes, hidden_channels]
+        batch_size, num_nodes, num_features, periods = x.size()
+        
+        # Flatten batch and node dimensions for PyTorch Geometric Temporal
+        x_batched = x.view(batch_size * num_nodes, num_features, periods)
+        
+        # Tile edge_index for the batched graph
+        num_edges = edge_index.size(1)
+        edge_index_batched = edge_index.repeat(1, batch_size)
+        offsets = torch.arange(batch_size, device=x.device).view(1, -1).repeat_interleave(num_edges, dim=1) * num_nodes
+        edge_index_batched = edge_index_batched + offsets
+        
+        if edge_weight is not None:
+            edge_weight_batched = edge_weight.repeat(batch_size)
+        else:
+            edge_weight_batched = None
+            
+        # A3TGCN expects x shape: [total_nodes, in_channels, periods]
+        h = self.tgnn(x_batched, edge_index_batched, edge_weight_batched)
+        # h shape: [batch_size * num_nodes, hidden_channels]
         
         h = F.relu(h)
         out = self.linear(h)
-        # out shape: [batch_size, num_nodes, 3]
-        return out
+        # out shape: [batch_size * num_nodes, 3]
+        
+        # Reshape back to [batch_size, num_nodes, 3]
+        return out.view(batch_size, num_nodes, 3)
