@@ -1,0 +1,27 @@
+# Environments
+.env
+venv/
+env/
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Data and Outputs (Do not commit large datasets)
+data/
+output/
+*.parquet
+*.csv
+*.json
+
+# Cache
+.cache/
+.pytest_cache/
+
+# IDEs and OS files
+.vscode/
+.idea/
+.DS_Store
