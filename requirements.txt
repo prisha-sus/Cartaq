@@ -1,3 +1,16 @@
+# ============================================================
+# Cartaq Urban Air Quality Intelligence Platform
+# Python dependencies for all four roles.
+#
+# Install:
+#   pip install -r requirements.txt
+#
+# Note: torch-sparse must be installed manually with the correct
+# wheel for your PyTorch + CUDA version before torch_geometric_temporal
+# will work. See README or AGENT.md for instructions.
+# ============================================================
+
+# ── Role 1: ST-GNN AQI Forecasting ───────────────────────────
 h3==4.1.0
 pandas
 pyarrow==15.0.0
@@ -8,4 +21,32 @@ retry-requests==2.0.0
 scikit-learn==1.4.1.post1
 torch==2.2.1
 torch-geometric==2.5.1
+# torch_geometric_temporal  # install from source; requires torch-sparse wheel
 python-dotenv
+
+# ── Role 2: Causal AI & GIS Automation ───────────────────────
+dowhy
+econml                  # required by dowhy for advanced estimators
+folium                  # headless GIS / intervention maps
+weasyprint              # HTML → PDF dossier generation
+jinja2                  # HTML template rendering (advisory dossiers)
+
+# ── Frontend / Dashboard ────────────────────────────────────
+streamlit               # web frontend (run: streamlit run app.py)
+pydeck                  # deck.gl H3 hex map layer
+plotly                  # interactive charts
+fpdf2                   # cross-platform PDF generation (no system deps)
+matplotlib              # charts embedded in PDF
+
+# ── Role 3: Big Data Analytics & BI ──────────────────────────
+clickhouse-driver       # native TCP client (for ingest_to_clickhouse.py)
+# clickhouse-connect    # install separately inside Superset container (HTTP-based)
+
+# ── Role 4: Agentic NLP & Systems Integration ────────────────
+psycopg2-binary         # PostGIS / PostgreSQL client
+twilio                  # automated voice call dispatch
+paho-mqtt               # Eclipse Mosquitto MQTT publisher
+transformers            # HuggingFace — AI4Bharat IndicTrans2
+sentencepiece           # IndicTrans2 tokenizer
+sacremoses              # text normalisation for IndicTrans2
+# torch is already listed above (shared with Role 1)

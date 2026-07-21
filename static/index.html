@@ -1,0 +1,1409 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CARTAQ - Air Quality Intelligence Platform</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                        mono: ['"JetBrains Mono"', 'monospace'],
+                    },
+                    colors: {
+                        aqi: {
+                            good: '#10b981',
+                            moderate: '#f59e0b',
+                            sensitive: '#f97316',
+                            unhealthy: '#ef4444',
+                            veryUnhealthy: '#a855f7',
+                            hazardous: '#881337',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+
+    <style>
+        body {
+            background-color: #030409;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            user-select: none;
+            overflow-x: hidden;
+        }
+
+        .bg-grid-pinstripes {
+            background-image: linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 38px 100%;
+        }
+
+        .lens-flare-glow {
+            position: absolute;
+            top: -80px;
+            left: 140px;
+            width: 520px;
+            height: 520px;
+            background: radial-gradient(circle, rgba(165, 180, 252, 0.35) 0%, rgba(99, 102, 241, 0.15) 40%, transparent 70%);
+            pointer-events: none;
+            filter: blur(28px);
+        }
+
+        .lens-starburst-ray-1 {
+            position: absolute;
+            top: 105px;
+            left: 310px;
+            width: 2px;
+            height: 260px;
+            background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.85), transparent);
+            transform: rotate(45deg);
+            pointer-events: none;
+            filter: blur(0.5px);
+        }
+
+        .lens-starburst-ray-2 {
+            position: absolute;
+            top: 105px;
+            left: 310px;
+            width: 2px;
+            height: 260px;
+            background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.85), transparent);
+            transform: rotate(-45deg);
+            pointer-events: none;
+            filter: blur(0.5px);
+        }
+
+        .lens-starburst-ray-3 {
+            position: absolute;
+            top: 105px;
+            left: 310px;
+            width: 2px;
+            height: 320px;
+            background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.5), transparent);
+            transform: rotate(0deg);
+            pointer-events: none;
+            filter: blur(0.5px);
+        }
+
+        .glass-card-dark {
+            background: rgba(18, 22, 38, 0.72);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .glass-card-blue {
+            background: linear-gradient(135deg, rgba(23, 33, 77, 0.9) 0%, rgba(14, 19, 46, 0.95) 100%);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(59, 130, 246, 0.35);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .glass-card-accent {
+            background: linear-gradient(135deg, rgba(30, 41, 75, 0.8) 0%, rgba(15, 23, 42, 0.85) 100%);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .pin-glow-yellow {
+            box-shadow: 0 0 30px rgba(250, 204, 21, 0.95), 0 0 60px rgba(250, 204, 21, 0.5);
+        }
+
+        .pin-glow-red {
+            box-shadow: 0 0 18px rgba(239, 68, 68, 0.9);
+        }
+
+        .pin-glass {
+            background: rgba(255, 255, 255, 0.16);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.32);
+            transition: all 0.3s ease;
+        }
+
+        .pin-glass:hover {
+            background: rgba(255, 255, 255, 0.35);
+            transform: scale(1.15);
+            cursor: pointer;
+        }
+
+        .globe-atmosphere-rim {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            box-shadow: 0 0 30px rgba(56, 189, 248, 0.45), inset 0 0 20px rgba(56, 189, 248, 0.3);
+            pointer-events: none;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+
+        .live-pulse {
+            animation: pulse-glow 2s infinite ease-in-out;
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 3px; }
+
+        /* ===== SPA PAGE SYSTEM ===== */
+        .page { display:none; padding-top:72px; min-height:100vh; background:#030409; }
+        .page.active { display:block; }
+        #page-globe.active { display:flex; flex-direction:column; height:100vh; padding-top:0; }
+        #page-globe.active > div { flex:1; }
+        .globe-wrapper { aspect-ratio:1/1; max-width:520px; max-height:520px; width:100%; }
+
+        /* Navbar */
+        .spa-nav { position:fixed; top:0; left:0; right:0; z-index:1000; background:rgba(7,8,17,0.92); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); border-bottom:1px solid rgba(255,255,255,0.07); height:64px; display:flex; align-items:center; justify-content:space-between; padding:0 28px; }
+        .nav-tab { padding:6px 18px; border-radius:999px; font-size:12px; font-weight:600; color:#94a3b8; transition:all 0.2s; cursor:pointer; background:transparent; border:none; }
+        .nav-tab:hover { color:#e2e8f0; background:rgba(255,255,255,0.06); }
+        .nav-tab.active { background:#6366f1; color:#fff; }
+
+        /* KPI cards */
+        .kpi-card { background:rgba(18,22,38,0.85); border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:18px 22px; transition:all 0.25s; position:relative; overflow:hidden; }
+        .kpi-card:hover { border-color:rgba(99,102,241,0.4); transform:translateY(-2px); }
+        .kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,#6366f1,#22d3ee); opacity:0; transition:opacity 0.3s; }
+        .kpi-card:hover::before { opacity:1; }
+        .kpi-value { font-size:2rem; font-weight:800; color:#22d3ee; font-family:'JetBrains Mono',monospace; }
+
+        /* Section cards */
+        .section-card { background:rgba(18,22,38,0.72); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,0.08); border-radius:20px; padding:24px; }
+        .section-card-blue { background:linear-gradient(135deg,rgba(23,33,77,0.9),rgba(14,19,46,0.95)); border:1px solid rgba(59,130,246,0.35); border-radius:20px; padding:24px; }
+
+        /* Dispatch table */
+        .dispatch-table { width:100%; border-collapse:collapse; }
+        .dispatch-table th { font-size:10px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.08em; padding:10px 16px; border-bottom:1px solid rgba(255,255,255,0.08); text-align:left; }
+        .dispatch-table td { padding:12px 16px; border-bottom:1px solid rgba(255,255,255,0.04); font-size:12px; color:#e2e8f0; }
+
+        /* Toast */
+        #toast { position:fixed; bottom:28px; right:28px; z-index:9999; background:rgba(18,22,38,0.95); border:1px solid rgba(255,255,255,0.1); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); border-radius:14px; padding:14px 20px; min-width:260px; transform:translateY(80px); opacity:0; transition:all 0.35s; pointer-events:none; }
+        #toast.show { transform:translateY(0); opacity:1; }
+
+        /* Pipeline step card */
+        .step-done { color:#10b981; }
+        .step-pending { color:#64748b; }
+
+        /* HAZARDOUS row pulse */
+        @keyframes hazard-pulse {
+            0%, 100% { background-color: rgba(239,68,68,0.08); }
+            50% { background-color: rgba(239,68,68,0.2); }
+        }
+        .row-hazardous { animation: hazard-pulse 2s infinite; }
+
+        /* Metric pill */
+        .metric-pill { background:rgba(18,22,38,0.85); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px 20px; display:inline-flex; align-items:center; gap:10px; }
+        .metric-pill .label { font-size:11px; color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; }
+        .metric-pill .value { font-size:18px; font-weight:800; color:#22d3ee; font-family:'JetBrains Mono',monospace; }
+
+        /* MQTT expander */
+        .mqtt-card { background:rgba(18,22,38,0.72); border:1px solid rgba(255,255,255,0.08); border-radius:12px; overflow:hidden; transition:all 0.2s; }
+        .mqtt-card:hover { border-color:rgba(99,102,241,0.3); }
+        .mqtt-header { padding:12px 16px; display:flex; align-items:center; justify-content:space-between; cursor:pointer; }
+        .mqtt-body { padding:0 16px 16px; display:none; font-family:'JetBrains Mono',monospace; font-size:11px; color:#94a3b8; white-space:pre-wrap; }
+        .mqtt-card.open .mqtt-body { display:block; }
+        .mqtt-card.open .mqtt-chevron { transform:rotate(90deg); }
+
+        /* Tailwind fallback utilities */
+        .flex { display:flex; }
+        .flex-col { flex-direction:column; }
+        .items-center { align-items:center; }
+        .items-start { align-items:flex-start; }
+        .justify-between { justify-content:space-between; }
+        .justify-center { justify-content:center; }
+        .gap-1 { gap:0.25rem; } .gap-1\\.5 { gap:0.375rem; } .gap-2 { gap:0.5rem; } .gap-3 { gap:0.75rem; } .gap-4 { gap:1rem; } .gap-6 { gap:1.5rem; }
+        .space-x-1 > * + * { margin-left:0.25rem; } .space-x-1\\.5 > * + * { margin-left:0.375rem; } .space-x-2 > * + * { margin-left:0.5rem; } .space-x-3 > * + * { margin-left:0.75rem; } .space-x-4 > * + * { margin-left:1rem; } .space-x-6 > * + * { margin-left:1.5rem; }
+        .space-y-3 > * + * { margin-top:0.75rem; } .space-y-4 > * + * { margin-top:1rem; }
+        .grid { display:grid; }
+        .grid-cols-2 { grid-template-columns:repeat(2,1fr); }
+        .grid-cols-3 { grid-template-columns:repeat(3,1fr); }
+        .grid-cols-5 { grid-template-columns:repeat(5,1fr); }
+        .grid-cols-6 { grid-template-columns:repeat(6,1fr); }
+        .grid-cols-7 { grid-template-columns:repeat(7,1fr); }
+        .grid-cols-12 { grid-template-columns:repeat(12,1fr); }
+        .col-span-5 { grid-column:span 5 / span 5; }
+        .col-span-7 { grid-column:span 7 / span 7; }
+        .gap-4 { gap:1rem; }
+        .w-full { width:100%; }
+        .h-full { height:100%; }
+        .max-w-7xl { max-width:80rem; }
+        .mx-auto { margin-left:auto; margin-right:auto; }
+        .px-4 { padding-left:1rem; padding-right:1rem; }
+        .px-6 { padding-left:1.5rem; padding-right:1.5rem; }
+        .px-8 { padding-left:2rem; padding-right:2rem; }
+        .py-8 { padding-top:2rem; padding-bottom:2rem; }
+        .py-4 { padding-top:1rem; padding-bottom:1rem; }
+        .py-6 { padding-top:1.5rem; padding-bottom:1.5rem; }
+        .pt-1 { padding-top:0.25rem; }
+        .pb-6 { padding-bottom:1.5rem; }
+        .pr-2 { padding-right:0.5rem; }
+        .pl-3 { padding-left:0.75rem; }
+        .mb-1 { margin-bottom:0.25rem; }
+        .mb-2 { margin-bottom:0.5rem; }
+        .mb-3 { margin-bottom:0.75rem; }
+        .mb-4 { margin-bottom:1rem; }
+        .mb-6 { margin-bottom:1.5rem; }
+        .mb-8 { margin-bottom:2rem; }
+        .mt-1 { margin-top:0.25rem; }
+        .mt-2 { margin-top:0.5rem; }
+        .mt-3 { margin-top:0.75rem; }
+        .mt-4 { margin-top:1rem; }
+        .mt-16 { margin-top:4rem; }
+        .mr-1 { margin-right:0.25rem; }
+        .mr-1\\.5 { margin-right:0.375rem; }
+        .ml-2 { margin-left:0.5rem; }
+        .text-xs { font-size:0.75rem; line-height:1rem; }
+        .text-sm { font-size:0.875rem; line-height:1.25rem; }
+        .text-base { font-size:1rem; line-height:1.5rem; }
+        .text-lg { font-size:1.125rem; line-height:1.75rem; }
+        .text-xl { font-size:1.25rem; line-height:1.75rem; }
+        .text-2xl { font-size:1.5rem; line-height:2rem; }
+        .text-3xl { font-size:1.875rem; line-height:2.25rem; }
+        .text-5xl { font-size:3rem; line-height:1; }
+        .font-normal { font-weight:400; }
+        .font-medium { font-weight:500; }
+        .font-semibold { font-weight:600; }
+        .font-bold { font-weight:700; }
+        .font-extrabold { font-weight:800; }
+        .tracking-tight { letter-spacing:-0.025em; }
+        .tracking-wide { letter-spacing:0.025em; }
+        .tracking-wider { letter-spacing:0.05em; }
+        .leading-none { line-height:1; }
+        .leading-snug { line-height:1.375; }
+        .leading-tight { line-height:1.25; }
+        .truncate { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .text-white { color:#fff; }
+        .text-slate-300 { color:#cbd5e1; }
+        .text-slate-400 { color:#94a3b8; }
+        .text-slate-500 { color:#64748b; }
+        .text-slate-900 { color:#0f172a; }
+        .text-slate-950 { color:#020617; }
+        .text-cyan-300 { color:#67e8f9; }
+        .text-cyan-400 { color:#22d3ee; }
+        .text-indigo-300 { color:#a5b4fc; }
+        .text-indigo-400 { color:#818cf8; }
+        .text-amber-300 { color:#fcd34d; }
+        .text-amber-400 { color:#fbbf24; }
+        .text-emerald-300 { color:#6ee7b7; }
+        .text-emerald-400 { color:#34d399; }
+        .text-red-300 { color:#fca5a5; }
+        .text-red-400 { color:#f87171; }
+        .text-yellow-400 { color:#facc15; }
+        .text-blue-200 { color:#bfdbfe; }
+        .text-sky-300 { color:#7dd3fc; }
+        .bg-transparent { background:transparent; }
+        .rounded-sm { border-radius:0.125rem; }
+        .rounded { border-radius:0.25rem; }
+        .rounded-md { border-radius:0.375rem; }
+        .rounded-lg { border-radius:0.5rem; }
+        .rounded-xl { border-radius:0.75rem; }
+        .rounded-2xl { border-radius:1rem; }
+        .rounded-3xl { border-radius:1.5rem; }
+        .rounded-full { border-radius:9999px; }
+        .border { border-width:1px; border-style:solid; }
+        .border-2 { border-width:2px; }
+        .border-t { border-top-width:1px; border-top-style:solid; }
+        .border-b { border-bottom-width:1px; border-bottom-style:solid; }
+        .border-l { border-left-width:1px; border-left-style:solid; }
+        .overflow-hidden { overflow:hidden; }
+        .overflow-x-auto { overflow-x:auto; }
+        .object-cover { object-fit:cover; }
+        .relative { position:relative; }
+        .absolute { position:absolute; }
+        .fixed { position:fixed; }
+        .inset-0 { top:0; right:0; bottom:0; left:0; }
+        .top-0 { top:0; }
+        .left-0 { left:0; }
+        .right-0 { right:0; }
+        .bottom-0 { bottom:0; }
+        .z-10 { z-index:10; }
+        .z-20 { z-index:20; }
+        .z-30 { z-index:30; }
+        .z-50 { z-index:50; }
+        .hidden { display:none; }
+        .pointer-events-none { pointer-events:none; }
+        .pointer-events-auto { pointer-events:auto; }
+        .cursor-pointer { cursor:pointer; }
+        .cursor-grab { cursor:grab; }
+        .select-none { user-select:none; }
+        .whitespace-pre-wrap { white-space:pre-wrap; }
+        .opacity-20 { opacity:0.2; }
+        .shadow-lg { box-shadow:0 10px 15px -3px rgba(0,0,0,0.1),0 4px 6px -4px rgba(0,0,0,0.1); }
+        .shadow-2xl { box-shadow:0 25px 50px -12px rgba(0,0,0,0.25); }
+        .shadow-sm { box-shadow:0 1px 2px 0 rgba(0,0,0,0.05); }
+    </style>
+</head>
+<body class="bg-[#030409] text-white">
+
+    <!-- ===== FIXED TOP NAVBAR ===== -->
+    <nav class="spa-nav">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-400 via-blue-500 to-indigo-400 flex items-center justify-center shadow-lg shadow-blue-500/30">
+                <i class="fa-solid fa-sparkles text-white text-xs"></i>
+            </div>
+            <span class="text-lg font-extrabold tracking-tight text-white">CARTAQ</span>
+            <span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[9px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 live-pulse"></span> LIVE
+            </span>
+        </div>
+
+        <div class="flex items-center gap-1">
+            <button class="nav-tab active" data-page="globe"><i class="fa-solid fa-earth-asia mr-1.5 text-[11px]"></i>Globe</button>
+            <button class="nav-tab" data-page="overview"><i class="fa-solid fa-chart-simple mr-1.5 text-[11px]"></i>Overview</button>
+            <button class="nav-tab" data-page="map"><i class="fa-solid fa-map mr-1.5 text-[11px]"></i>Map</button>
+            <button class="nav-tab" data-page="causal"><i class="fa-solid fa-diagram-project mr-1.5 text-[11px]"></i>Causal</button>
+            <button class="nav-tab" data-page="analytics"><i class="fa-solid fa-chart-line mr-1.5 text-[11px]"></i>Analytics</button>
+            <button class="nav-tab" data-page="dispatch"><i class="fa-solid fa-truck-fast mr-1.5 text-[11px]"></i>Dispatch</button>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <div class="relative">
+                <input type="text" id="citySearchInput" placeholder="Search global city..." class="bg-slate-900/80 border border-white/10 text-xs text-white rounded-full px-3.5 py-1.5 pl-8 w-44 focus:outline-none focus:border-cyan-400/60 focus:w-56 transition-all placeholder-slate-500" />
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-[10px] text-slate-400"></i>
+                <div id="searchResults" class="hidden absolute left-0 right-0 top-9 bg-[#0f172a] border border-white/15 rounded-xl shadow-2xl overflow-hidden z-50 text-xs"></div>
+            </div>
+            <button id="btnAiAdvisor" class="text-amber-400/90 font-semibold text-xs flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-full hover:text-amber-300 transition-colors">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> AI Advisor
+            </button>
+        </div>
+    </nav>
+
+    <!-- ===== PAGE: GLOBE ===== -->
+    <div id="page-globe" class="page active bg-grid-pinstripes">
+        <div class="relative w-full h-full bg-[#070811] flex flex-col justify-between">
+
+            <div class="lens-flare-glow"></div>
+            <div class="lens-starburst-ray-1"></div>
+            <div class="lens-starburst-ray-2"></div>
+            <div class="lens-starburst-ray-3"></div>
+
+            <div class="absolute right-[5%] top-[12%] w-[580px] h-[580px] rounded-full bg-blue-600/20 blur-[110px] pointer-events-none"></div>
+
+            <main class="relative z-10 grid grid-cols-12 h-full px-8 pb-6 pt-1 gap-4 mt-16">
+                <div class="col-span-5 flex flex-col justify-between pr-2 pt-1">
+                    <div>
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <h1 class="text-3xl font-extrabold tracking-tight text-white leading-none">
+                                    Air Quality <span class="text-slate-500 font-normal">Index</span>
+                                </h1>
+                                <div id="liveClock" class="text-xs text-slate-400 mt-2 font-mono">Loading local time...</div>
+                            </div>
+                            <div class="flex items-center space-x-2 bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl backdrop-blur-sm">
+                                <span class="text-xs text-slate-400 font-medium">Target:</span>
+                                <img id="locationFlag" src="https://flagcdn.com/w20/id.png" alt="Country Flag" class="w-4 h-2.5 rounded-sm object-cover">
+                                <span id="locationCode" class="font-bold text-xs text-white">IDN</span>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center space-x-1.5 mt-3 overflow-x-auto pb-1 no-scrollbar text-[10px]">
+                            <span class="text-slate-500 text-[9px] uppercase font-bold tracking-wider mr-1">Quick:</span>
+                            <button onclick="selectCity('Jakarta')" class="city-pill bg-blue-600/30 border border-blue-400/40 text-blue-200 hover:bg-blue-600 hover:text-white px-2.5 py-1 rounded-full transition-all">Jakarta</button>
+                            <button onclick="selectCity('Tokyo')" class="city-pill bg-slate-800/80 border border-white/10 text-slate-300 hover:bg-blue-600 hover:text-white px-2.5 py-1 rounded-full transition-all">Tokyo</button>
+                            <button onclick="selectCity('London')" class="city-pill bg-slate-800/80 border border-white/10 text-slate-300 hover:bg-blue-600 hover:text-white px-2.5 py-1 rounded-full transition-all">London</button>
+                            <button onclick="selectCity('New York')" class="city-pill bg-slate-800/80 border border-white/10 text-slate-300 hover:bg-blue-600 hover:text-white px-2.5 py-1 rounded-full transition-all">New York</button>
+                            <button onclick="selectCity('Delhi')" class="city-pill bg-slate-800/80 border border-white/10 text-slate-300 hover:bg-blue-600 hover:text-white px-2.5 py-1 rounded-full transition-all">Delhi</button>
+                            <button onclick="selectCity('Cairo')" class="city-pill bg-slate-800/80 border border-white/10 text-slate-300 hover:bg-blue-600 hover:text-white px-2.5 py-1 rounded-full transition-all">Cairo</button>
+                        </div>
+
+                        <div class="glass-card-dark rounded-2xl p-4 mt-3 w-full transition-all hover:border-white/20 relative">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-semibold text-white tracking-wide">Main Statistics</span>
+                                <span id="aqiStatusBadge" class="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">Moderate</span>
+                            </div>
+                            <div class="grid grid-cols-12 items-center mt-2">
+                                <div class="col-span-5">
+                                    <div class="text-[10px] text-slate-400 font-medium">US AQI INDEX</div>
+                                    <div id="aqiValue" class="text-5xl font-extrabold text-white my-0.5 tracking-tight transition-all duration-500">78</div>
+                                    <div class="text-[11px] text-slate-300 font-medium flex items-center space-x-1">
+                                        <span>Pollutant:</span>
+                                        <span id="dominantPollutant" class="text-cyan-400 font-bold">PM2.5</span>
+                                    </div>
+                                </div>
+                                <div class="col-span-7 space-y-1.5 pl-3 border-l border-white/10">
+                                    <div class="flex items-center justify-between text-[10px]">
+                                        <span class="text-slate-400">PM2.5</span>
+                                        <span id="valPm25" class="text-white font-mono font-medium">24.5 µg/m³</span>
+                                    </div>
+                                    <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                                        <div id="barPm25" class="bg-amber-400 h-full rounded-full transition-all duration-700" style="width: 50%;"></div>
+                                    </div>
+                                    <div class="flex items-center justify-between text-[10px]">
+                                        <span class="text-slate-400">PM10</span>
+                                        <span id="valPm10" class="text-white font-mono font-medium">42.1 µg/m³</span>
+                                    </div>
+                                    <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                                        <div id="barPm10" class="bg-emerald-400 h-full rounded-full transition-all duration-700" style="width: 35%;"></div>
+                                    </div>
+                                    <div class="flex items-center justify-between text-[10px]">
+                                        <span class="text-slate-400">Ozone (O₃)</span>
+                                        <span id="valO3" class="text-white font-mono font-medium">18.0 µg/m³</span>
+                                    </div>
+                                    <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                                        <div id="barO3" class="bg-cyan-400 h-full rounded-full transition-all duration-700" style="width: 25%;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="glass-card-blue rounded-2xl p-4 mt-3 w-full relative overflow-hidden transition-all hover:border-blue-400/50">
+                            <svg class="absolute right-2 top-2 w-32 h-24 opacity-20 text-blue-300 pointer-events-none" viewBox="0 0 100 60" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M10 15 Q 35 5, 60 15 T 100 15" />
+                                <path d="M0 30 Q 30 18, 60 30 T 95 30" />
+                                <path d="M20 45 Q 45 35, 70 45 T 100 45" />
+                            </svg>
+                            <div class="flex items-center justify-between">
+                                <div class="text-xs font-semibold text-white flex items-center gap-1.5">
+                                    <i class="fa-solid fa-shield-heart text-cyan-400"></i> Risk of Pollution
+                                </div>
+                                <button id="btnHealthDetails" class="bg-[#facc15] hover:bg-yellow-400 text-slate-950 text-[10px] font-bold px-3 py-1 rounded-full transition-colors shadow-sm">Health Guide</button>
+                            </div>
+                            <div class="grid grid-cols-12 items-center mt-1">
+                                <div class="col-span-5">
+                                    <div class="text-[10px] text-slate-300 font-medium">ESTIMATED RISK</div>
+                                    <div id="riskValue" class="text-3xl font-extrabold text-white my-0.5 tracking-tight">35%</div>
+                                </div>
+                                <div class="col-span-7 text-[10px] text-slate-200 bg-white/5 border border-white/10 rounded-xl p-2 backdrop-blur-sm">
+                                    <div class="font-semibold text-cyan-300 mb-0.5">Recommendation:</div>
+                                    <div id="healthAdviceText" class="leading-snug text-slate-300">Air quality is acceptable; uncommonly sensitive people should consider limiting prolonged outdoor exertion.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="col-span-7 relative flex items-center justify-center">
+                    <div class="relative globe-wrapper flex items-center justify-center">
+                        <canvas id="globeCanvas" class="w-full h-full cursor-grab active:cursor-grabbing rounded-full"></canvas>
+                        <div class="globe-atmosphere-rim"></div>
+
+                        <div onclick="selectCity('Reykjavik')" class="absolute top-[17%] left-[49%] pin-glass text-white text-[10px] font-semibold px-2.5 py-0.5 rounded-full">90</div>
+                        <div onclick="selectCity('London')" class="absolute top-[20%] left-[58%] pin-glass text-white text-[10px] font-semibold px-2.5 py-0.5 rounded-full">155</div>
+                        <div onclick="selectCity('Riyadh')" class="absolute top-[31%] left-[69%] bg-[#ef4444] text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full pin-glow-red hover:scale-110 cursor-pointer transition-transform">174</div>
+                        <div onclick="selectCity('Tokyo')" class="absolute top-[38%] left-[81%] pin-glass text-white text-[10px] font-semibold px-2.5 py-0.5 rounded-full">112</div>
+                        <div onclick="selectCity('Cairo')" class="absolute top-[43%] left-[55%] pin-glass text-white text-[10px] font-semibold px-2.5 py-0.5 rounded-full">132</div>
+                        <div onclick="selectCity('New York')" class="absolute top-[54%] left-[41%] pin-glass text-white text-[10px] font-semibold px-2.5 py-0.5 rounded-full">78</div>
+                        <div onclick="selectCity('Cape Town')" class="absolute top-[67%] left-[63%] pin-glass text-white text-[10px] font-semibold px-2.5 py-0.5 rounded-full">90</div>
+
+                        <div id="globeTooltip" class="absolute top-[43%] left-[58%] z-30 bg-[#101428]/95 backdrop-blur-md border border-white/20 rounded-xl p-3.5 w-[230px] shadow-2xl pointer-events-auto transition-all duration-300 hover:scale-105">
+                            <div class="flex items-center justify-between text-[10px] text-slate-300 font-medium mb-2">
+                                <div class="flex items-center space-x-1.5">
+                                    <span id="tooltipStatusDot" class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                                    <span id="tooltipLocationTitle" class="truncate max-w-[130px] font-bold text-white">Jakarta, Indonesia</span>
+                                </div>
+                                <button onclick="openAiAdvisorModal()" class="text-cyan-400 hover:text-cyan-300 underline text-[9px] font-semibold">AI Report</button>
+                            </div>
+                            <div class="flex items-center space-x-2.5">
+                                <div id="tooltipAqiBadge" class="bg-[#f97316] text-white rounded-lg px-2 py-1 text-center font-bold min-w-[44px] transition-colors duration-500">
+                                    <div id="tooltipAqiVal" class="text-base leading-none">137</div>
+                                    <div class="text-[7px] font-extrabold tracking-tighter opacity-90 uppercase">US AQI</div>
+                                </div>
+                                <div id="tooltipAqiStatus" class="text-xs font-bold text-white leading-tight">Unhealthy for sensitive people</div>
+                            </div>
+                            <div class="flex items-center justify-between text-[10px] text-slate-300 mt-2.5 pt-2 border-t border-white/10 font-medium">
+                                <span class="flex items-center gap-1"><i class="fa-solid fa-sun text-yellow-400 text-[11px]"></i> <span id="tooltipTemp">34°C</span></span>
+                                <span class="flex items-center gap-1"><i class="fa-solid fa-droplet text-cyan-400 text-[10px]"></i> <span id="tooltipHumidity">50%</span></span>
+                                <span class="flex items-center gap-1"><i class="fa-solid fa-wind text-sky-300 text-[10px]"></i> <span id="tooltipWind">13.2 km/h</span></span>
+                            </div>
+                        </div>
+
+                        <div id="targetPin" class="absolute bottom-[22%] right-[11%] z-20 flex items-center justify-center cursor-pointer transform hover:scale-110 transition-transform">
+                            <i class="fa-solid fa-sparkle absolute -top-2 left-2 text-white text-xs z-30"></i>
+                            <div id="targetPinVal" class="w-14 h-14 rounded-full bg-[#facc15] text-slate-950 font-extrabold text-xl flex items-center justify-center pin-glow-yellow border-2 border-yellow-200">137</div>
+                            <div class="absolute -top-6 -left-10 w-12 h-0.5 bg-gradient-to-r from-yellow-300 to-transparent transform -rotate-45"></div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- ===== PAGE: OVERVIEW ===== -->
+    <div id="page-overview" class="page bg-grid-pinstripes">
+        <div class="max-w-7xl mx-auto px-6 py-8">
+            <h2 class="text-2xl font-extrabold text-white mb-6">System Overview</h2>
+
+            <!-- KPI Grid -->
+            <div class="grid grid-cols-3 gap-4 mb-8">
+                <div class="kpi-card">
+                    <div class="text-xs text-slate-400 font-medium mb-1">Hexes Monitored</div>
+                    <div class="kpi-value" id="kpiHexes">--</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="text-xs text-slate-400 font-medium mb-1">Max AQI 24h</div>
+                    <div class="kpi-value" id="kpiMaxAqi">--</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="text-xs text-slate-400 font-medium mb-1">Mean AQI 24h</div>
+                    <div class="kpi-value" id="kpiMeanAqi">--</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="text-xs text-slate-400 font-medium mb-1">High AQI Zones</div>
+                    <div class="kpi-value" id="kpiHighZones">--</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="text-xs text-slate-400 font-medium mb-1">Calls Dispatched</div>
+                    <div class="kpi-value" id="kpiCalls">--</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="text-xs text-slate-400 font-medium mb-1">MQTT Messages</div>
+                    <div class="kpi-value" id="kpiMqtt">--</div>
+                </div>
+            </div>
+
+            <!-- Pipeline Status -->
+            <div class="section-card p-6 mb-8">
+                <h3 class="text-sm font-bold text-white mb-4 flex items-center gap-2"><i class="fa-solid fa-code-branch text-indigo-400"></i> Pipeline Status</h3>
+                <div id="pipelineSteps" class="grid grid-cols-6 gap-3"></div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="section-card p-6">
+                <h3 class="text-sm font-bold text-white mb-4 flex items-center gap-2"><i class="fa-solid fa-bolt text-amber-400"></i> Quick Actions</h3>
+                <div class="flex gap-3">
+                    <button onclick="API.runPipeline('demo').then(r=>showToast('Pipeline','Demo step executed'))" class="bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-600/40 px-5 py-2.5 rounded-full text-xs font-bold transition-all flex items-center gap-2"><i class="fa-solid fa-play"></i> Run Demo</button>
+                    <button onclick="API.runPipeline('graph').then(r=>showToast('Pipeline','Graph step executed'))" class="bg-cyan-600/20 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-600/40 px-5 py-2.5 rounded-full text-xs font-bold transition-all flex items-center gap-2"><i class="fa-solid fa-project-diagram"></i> Build Graph</button>
+                    <button onclick="API.runPipeline('enrich').then(r=>showToast('Pipeline','Enrich step executed'))" class="bg-amber-600/20 border border-amber-500/30 text-amber-300 hover:bg-amber-600/40 px-5 py-2.5 rounded-full text-xs font-bold transition-all flex items-center gap-2"><i class="fa-solid fa-database"></i> Enrich Data</button>
+                    <button onclick="API.runPipeline('dispatch').then(r=>showToast('Pipeline','Dispatch step executed'))" class="bg-emerald-600/20 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-600/40 px-5 py-2.5 rounded-full text-xs font-bold transition-all flex items-center gap-2"><i class="fa-solid fa-truck-fast"></i> Run Dispatch</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== PAGE: MAP ===== -->
+    <div id="page-map" class="page bg-grid-pinstripes">
+        <div class="max-w-7xl mx-auto px-6 py-8">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-2xl font-extrabold text-white">AQI Hex Map</h2>
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] text-slate-400 font-semibold uppercase">Horizon</span>
+                        <select id="mapHorizon" class="bg-slate-900/80 border border-white/10 text-xs text-white rounded-lg px-3 py-1.5 focus:outline-none focus:border-indigo-400/60">
+                            <option value="24">24h</option>
+                            <option value="48">48h</option>
+                            <option value="72">72h</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] text-slate-400 font-semibold uppercase">Threshold</span>
+                        <input type="range" id="aqiThreshold" min="0" max="500" value="100" class="w-24 accent-indigo-500" />
+                        <span id="aqiThresholdVal" class="text-xs font-mono text-cyan-400 w-8">100</span>
+                    </div>
+                    <div class="flex gap-1.5">
+                        <span class="text-[9px] px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Good</span>
+                        <span class="text-[9px] px-2 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">Moderate</span>
+                        <span class="text-[9px] px-2 py-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/30">Unhealthy</span>
+                        <span class="text-[9px] px-2 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">Hazardous</span>
+                    </div>
+                    <button id="refreshMap" class="bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-600/40 px-3 py-1.5 rounded-full text-xs font-bold transition-all"><i class="fa-solid fa-rotate"></i> Refresh</button>
+                </div>
+            </div>
+
+            <div class="section-card p-4 mb-6">
+                <div id="mapPlot" style="width:100%;height:500px;"></div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-6">
+                <div class="section-card p-4">
+                    <h3 class="text-xs font-bold text-white mb-3 uppercase tracking-wider">AQI Histogram</h3>
+                    <div id="histogramPlot" style="width:100%;height:280px;"></div>
+                </div>
+                <div class="section-card p-4">
+                    <h3 class="text-xs font-bold text-white mb-3 uppercase tracking-wider">Top 10 Hotspots</h3>
+                    <div class="overflow-x-auto">
+                        <table class="dispatch-table" id="hotspotTable">
+                            <thead>
+                                <tr><th>#</th><th>H3 Index</th><th>AQI</th><th>Category</th></tr>
+                            </thead>
+                            <tbody id="hotspotBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== PAGE: CAUSAL ===== -->
+    <div id="page-causal" class="page bg-grid-pinstripes">
+        <div class="max-w-7xl mx-auto px-6 py-8">
+            <h2 class="text-2xl font-extrabold text-white mb-6">Causal Analysis</h2>
+
+            <div class="section-card-blue p-6 mb-8">
+                <div class="flex items-center gap-4">
+                    <div class="w-14 h-14 rounded-full bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-2xl font-extrabold text-indigo-300" id="causalATE">--</div>
+                    <div>
+                        <div class="text-xs text-slate-400 font-semibold uppercase tracking-wider">Average Treatment Effect (ATE)</div>
+                        <div id="causalDesc" class="text-sm text-slate-200 mt-1">Estimated causal impact of AQI on health outcomes across monitored zones.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-card p-6">
+                <h3 class="text-sm font-bold text-white mb-4 flex items-center gap-2"><i class="fa-solid fa-chart-bar text-indigo-400"></i> Causal Source Contributions</h3>
+                <div id="causalPlot" style="width:100%;height:400px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== PAGE: ANALYTICS ===== -->
+    <div id="page-analytics" class="page bg-grid-pinstripes">
+        <div class="max-w-7xl mx-auto px-6 py-8">
+            <h2 class="text-2xl font-extrabold text-white mb-6">Analytics</h2>
+
+            <div class="grid grid-cols-2 gap-6">
+                <div class="section-card p-4">
+                    <h3 class="text-xs font-bold text-white mb-3 uppercase tracking-wider">AQI Distribution by Horizon</h3>
+                    <div id="boxPlot" style="width:100%;height:260px;"></div>
+                </div>
+                <div class="section-card p-4">
+                    <h3 class="text-xs font-bold text-white mb-3 uppercase tracking-wider">Hexes per AQI Category</h3>
+                    <div id="stackedBarPlot" style="width:100%;height:260px;"></div>
+                </div>
+                <div class="section-card p-4">
+                    <h3 class="text-xs font-bold text-white mb-3 uppercase tracking-wider">Wind Speed vs AQI</h3>
+                    <div id="scatterWindPlot" style="width:100%;height:260px;"></div>
+                </div>
+                <div class="section-card p-4">
+                    <h3 class="text-xs font-bold text-white mb-3 uppercase tracking-wider">Temperature vs AQI (color=humidity)</h3>
+                    <div id="scatterTempPlot" style="width:100%;height:260px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== PAGE: DISPATCH ===== -->
+    <div id="page-dispatch" class="page bg-grid-pinstripes">
+        <div class="max-w-7xl mx-auto px-6 py-8">
+            <h2 class="text-2xl font-extrabold text-white mb-6">Dispatch Center</h2>
+
+            <div class="flex gap-4 mb-8">
+                <div class="metric-pill"><span class="label">Latency</span><span class="value" id="dispLatency">--</span></div>
+                <div class="metric-pill"><span class="label">Calls</span><span class="value" id="dispCalls">--</span></div>
+                <div class="metric-pill"><span class="label">MQTT msgs</span><span class="value" id="dispMqtt">--</span></div>
+                <div class="metric-pill"><span class="label">ms/hex</span><span class="value" id="dispHexMs">--</span></div>
+            </div>
+
+            <div class="section-card p-6 mb-8">
+                <h3 class="text-sm font-bold text-white mb-4 flex items-center gap-2"><i class="fa-solid fa-table text-amber-400"></i> Active Alerts</h3>
+                <div class="overflow-x-auto">
+                    <table class="dispatch-table" id="alertTable">
+                        <thead>
+                            <tr><th>Facility</th><th>Type</th><th>AQI</th><th>Advisory</th><th>Call</th><th>MQTT</th></tr>
+                        </thead>
+                        <tbody id="alertBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="section-card p-6">
+                <h3 class="text-sm font-bold text-white mb-4 flex items-center gap-2"><i class="fa-solid fa-topic text-cyan-400"></i> MQTT Topics</h3>
+                <div id="mqttTopics"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== AI ADVISOR MODAL ===== -->
+    <div id="aiModal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="bg-[#0f172a] border border-white/15 rounded-3xl max-w-lg w-full p-6 shadow-2xl relative overflow-hidden">
+            <div class="flex items-center justify-between pb-4 border-b border-white/10">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-400 to-orange-500 flex items-center justify-center text-slate-950 font-bold text-sm"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                    <div>
+                        <h3 class="text-base font-bold text-white">AI Atmospheric Health Report</h3>
+                        <p id="aiModalCity" class="text-xs text-slate-400">Jakarta, Indonesia</p>
+                    </div>
+                </div>
+                <button onclick="closeAiAdvisorModal()" class="text-slate-400 hover:text-white text-lg"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="py-4 space-y-4">
+                <div id="aiModalLoading" class="hidden flex flex-col items-center justify-center py-8 space-y-3">
+                    <div class="w-8 h-8 border-3 border-amber-400 border-t-transparent rounded-full animate-spin"></div>
+                    <p class="text-xs text-slate-400">Consulting Gemini AI live atmospheric model...</p>
+                </div>
+                <div id="aiModalContent" class="text-xs text-slate-300 leading-relaxed space-y-3"></div>
+            </div>
+            <div class="pt-3 border-t border-white/10 flex justify-end">
+                <button onclick="closeAiAdvisorModal()" class="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-full transition-all">Close Report</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== TOAST ===== -->
+    <div id="toast">
+        <div class="toast-title text-sm font-bold text-white"></div>
+        <div class="toast-body text-xs text-slate-300 mt-1"></div>
+    </div>
+
+<script>
+// ====================================================================
+// EXISTING GLOBE CODE (kept intact)
+// ====================================================================
+
+const GLOBAL_CITIES = [
+    { name: "Jakarta", country: "Indonesia", code: "IDN", flag: "https://flagcdn.com/w20/id.png", lat: -6.2088, lon: 106.8456 },
+    { name: "Tokyo", country: "Japan", code: "JPN", flag: "https://flagcdn.com/w20/jp.png", lat: 35.6762, lon: 139.6503 },
+    { name: "London", country: "United Kingdom", code: "GBR", flag: "https://flagcdn.com/w20/gb.png", lat: 51.5074, lon: -0.1278 },
+    { name: "New York", country: "United States", code: "USA", flag: "https://flagcdn.com/w20/us.png", lat: 40.7128, lon: -74.0060 },
+    { name: "Delhi", country: "India", code: "IND", flag: "https://flagcdn.com/w20/in.png", lat: 28.6139, lon: 77.2090 },
+    { name: "Cairo", country: "Egypt", code: "EGY", flag: "https://flagcdn.com/w20/eg.png", lat: 30.0444, lon: 31.2357 },
+    { name: "Paris", country: "France", code: "FRA", flag: "https://flagcdn.com/w20/fr.png", lat: 48.8566, lon: 2.3522 },
+    { name: "Sydney", country: "Australia", code: "AUS", flag: "https://flagcdn.com/w20/au.png", lat: -33.8688, lon: 151.2093 },
+    { name: "Beijing", country: "China", code: "CHN", flag: "https://flagcdn.com/w20/cn.png", lat: 39.9042, lon: 116.4074 },
+    { name: "Riyadh", country: "Saudi Arabia", code: "SAU", flag: "https://flagcdn.com/w20/sa.png", lat: 24.7136, lon: 46.6753 },
+    { name: "São Paulo", country: "Brazil", code: "BRA", flag: "https://flagcdn.com/w20/br.png", lat: -23.5505, lon: -46.6333 },
+    { name: "Reykjavik", country: "Iceland", code: "ISL", flag: "https://flagcdn.com/w20/is.png", lat: 64.1466, lon: -21.9426 },
+    { name: "Cape Town", country: "South Africa", code: "ZAF", flag: "https://flagcdn.com/w20/za.png", lat: -33.9249, lon: 18.4241 }
+];
+
+let currentCity = GLOBAL_CITIES[0];
+let globeInited = false;
+
+function initGlobe() {
+    if (globeInited) return;
+    globeInited = true;
+
+    const updateClock = () => {
+        const now = new Date();
+        document.getElementById('liveClock').innerText = now.toLocaleString('en-GB', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+    };
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    const container = document.getElementById('globeCanvas');
+    const parent = container.parentElement;
+    const size = Math.min(parent.clientWidth, parent.clientHeight, 520);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+    camera.position.z = 2.75;
+
+    const renderer = new THREE.WebGLRenderer({
+        canvas: container,
+        alpha: true,
+        antialias: true
+    });
+    renderer.setSize(size, size);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    const geometry = new THREE.SphereGeometry(1, 96, 96);
+
+    const textureCanvas = document.createElement('canvas');
+    textureCanvas.width = 4096;
+    textureCanvas.height = 2048;
+    const ctx = textureCanvas.getContext('2d');
+
+    const oceanGrad = ctx.createLinearGradient(0, 0, 0, 2048);
+    oceanGrad.addColorStop(0, '#0a1024');
+    oceanGrad.addColorStop(0.5, '#040714');
+    oceanGrad.addColorStop(1, '#010208');
+    ctx.fillStyle = oceanGrad;
+    ctx.fillRect(0, 0, 4096, 2048);
+
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.08)';
+    ctx.lineWidth = 1;
+    for (let lat = -80; lat <= 80; lat += 20) {
+        const y = ((90 - lat) / 180) * 2048;
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(4096, y); ctx.stroke();
+    }
+    for (let lon = -180; lon <= 180; lon += 30) {
+        const x = ((lon + 180) / 360) * 4096;
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 2048); ctx.stroke();
+    }
+
+    const earthCanvasTexture = new THREE.CanvasTexture(textureCanvas);
+    const material = new THREE.MeshStandardMaterial({
+        map: earthCanvasTexture,
+        roughness: 0.4,
+        metalness: 0.1
+    });
+
+    const earthMesh = new THREE.Mesh(geometry, material);
+    earthMesh.rotation.y = 2.05;
+    earthMesh.rotation.x = 0.22;
+    scene.add(earthMesh);
+
+    const textureLoader = new THREE.TextureLoader();
+    textureLoader.setCrossOrigin('anonymous');
+    textureLoader.load(
+        'https://unpkg.com/three-globe/example/img/earth-night.jpg',
+        (satelliteTexture) => {
+            earthMesh.material.map = satelliteTexture;
+            earthMesh.material.needsUpdate = true;
+        }
+    );
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 2.2);
+    scene.add(ambientLight);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    dirLight.position.set(5, 3, 5);
+    scene.add(dirLight);
+
+    let isDragging = false;
+    let previousMousePosition = { x: 0, y: 0 };
+
+    container.addEventListener('mousedown', () => {
+        isDragging = true;
+    });
+
+    container.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const deltaMove = {
+            x: e.clientX - previousMousePosition.x,
+            y: e.clientY - previousMousePosition.y
+        };
+        earthMesh.rotation.y += deltaMove.x * 0.005;
+        earthMesh.rotation.x += deltaMove.y * 0.005;
+        previousMousePosition = { x: e.clientX, y: e.clientY };
+
+        const currentLon = (((-earthMesh.rotation.y * 180 / Math.PI) % 360) + 540) % 360 - 180;
+        const currentLat = Math.max(-85, Math.min(85, (earthMesh.rotation.x * 180 / Math.PI)));
+
+        findAndSelectNearestCity(currentLat, currentLon);
+    });
+
+    window.addEventListener('mouseup', () => { isDragging = false; });
+
+    function resizeGlobe() {
+        const newSize = Math.min(parent.clientWidth, parent.clientHeight, 520);
+        if (newSize > 0 && newSize !== renderer.domElement.width) {
+            renderer.setSize(newSize, newSize);
+            camera.aspect = 1;
+            camera.updateProjectionMatrix();
+        }
+    }
+    window.addEventListener('resize', resizeGlobe);
+
+    function animate() {
+        requestAnimationFrame(animate);
+        earthMesh.rotation.y += 0.0008;
+        renderer.render(scene, camera);
+    }
+    animate();
+
+    fetchLiveAirQualityData(currentCity);
+}
+
+function findAndSelectNearestCity(lat, lon) {
+    let closestCity = GLOBAL_CITIES[0];
+    let minDistance = Infinity;
+    GLOBAL_CITIES.forEach(city => {
+        const dLat = city.lat - lat;
+        const dLon = city.lon - lon;
+        const dist = Math.sqrt(dLat * dLat + dLon * dLon);
+        if (dist < minDistance) {
+            minDistance = dist;
+            closestCity = city;
+        }
+    });
+    if (closestCity.name !== currentCity.name) {
+        currentCity = closestCity;
+        updateLocationUI(currentCity);
+        fetchLiveAirQualityData(currentCity);
+    }
+}
+
+function selectCity(cityName) {
+    const city = GLOBAL_CITIES.find(c => c.name.toLowerCase() === cityName.toLowerCase());
+    if (city) {
+        currentCity = city;
+        updateLocationUI(currentCity);
+        fetchLiveAirQualityData(currentCity);
+    }
+}
+
+function updateLocationUI(city) {
+    document.getElementById('locationFlag').src = city.flag;
+    document.getElementById('locationCode').innerText = city.code;
+    document.getElementById('tooltipLocationTitle').innerText = `${city.name}, ${city.country}`;
+}
+
+async function fetchLiveAirQualityData(city) {
+    try {
+        const url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${city.lat}&longitude=${city.lon}&current=us_aqi,pm2_5,pm10,nitrogen_dioxide,ozone`;
+        const response = await fetch(url);
+        const data = await response.json();
+        if (data && data.current) {
+            const aqi = Math.round(data.current.us_aqi || Math.floor(Math.random() * 80) + 40);
+            const pm25 = (data.current.pm2_5 || (aqi * 0.35)).toFixed(1);
+            const pm10 = (data.current.pm10 || (aqi * 0.55)).toFixed(1);
+            const o3 = (data.current.ozone || (aqi * 0.25)).toFixed(1);
+            updateDashboardMetrics(aqi, pm25, pm10, o3);
+        } else {
+            fallbackSimulatedMetrics();
+        }
+    } catch (err) {
+        fallbackSimulatedMetrics();
+    }
+}
+
+function fallbackSimulatedMetrics() {
+    const mockAqi = Math.floor(Math.random() * 110) + 35;
+    updateDashboardMetrics(mockAqi, (mockAqi * 0.35).toFixed(1), (mockAqi * 0.6).toFixed(1), (mockAqi * 0.2).toFixed(1));
+}
+
+function updateDashboardMetrics(aqi, pm25, pm10, o3) {
+    const elAqi = document.getElementById('aqiValue');
+    const elBadge = document.getElementById('aqiStatusBadge');
+    const elTooltipVal = document.getElementById('tooltipAqiVal');
+    const elTooltipStatus = document.getElementById('tooltipAqiStatus');
+    const elTooltipBadge = document.getElementById('tooltipAqiBadge');
+    const elTargetPinVal = document.getElementById('targetPinVal');
+    const elRiskVal = document.getElementById('riskValue');
+    const elHealthAdvice = document.getElementById('healthAdviceText');
+
+    document.getElementById('valPm25').innerText = `${pm25} µg/m³`;
+    document.getElementById('valPm10').innerText = `${pm10} µg/m³`;
+    document.getElementById('valO3').innerText = `${o3} µg/m³`;
+
+    document.getElementById('barPm25').style.width = `${Math.min(100, (pm25 / 75) * 100)}%`;
+    document.getElementById('barPm10').style.width = `${Math.min(100, (pm10 / 150) * 100)}%`;
+    document.getElementById('barO3').style.width = `${Math.min(100, (o3 / 100) * 100)}%`;
+
+    elAqi.innerText = aqi;
+    elTooltipVal.innerText = aqi;
+    elTargetPinVal.innerText = aqi;
+
+    let statusText = "Good";
+    let badgeBg = "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
+    let hexColor = "#10b981";
+    let riskPct = Math.min(95, Math.max(12, Math.round(aqi * 0.45)));
+    let advice = "Air quality is ideal for most individuals. Enjoy normal outdoor activities.";
+
+    if (aqi > 50 && aqi <= 100) {
+        statusText = "Moderate";
+        badgeBg = "bg-amber-500/20 text-amber-300 border-amber-500/30";
+        hexColor = "#f59e0b";
+        advice = "Air quality is acceptable; unusually sensitive individuals should consider limiting prolonged outdoor exertion.";
+    } else if (aqi > 100 && aqi <= 150) {
+        statusText = "Unhealthy for Sensitive Groups";
+        badgeBg = "bg-orange-500/20 text-orange-300 border-orange-500/30";
+        hexColor = "#f97316";
+        advice = "Members of sensitive groups may experience health effects. General public is less likely to be affected.";
+    } else if (aqi > 150 && aqi <= 200) {
+        statusText = "Unhealthy";
+        badgeBg = "bg-red-500/20 text-red-300 border-red-500/30";
+        hexColor = "#ef4444";
+        advice = "Everyone may begin to experience health effects; members of sensitive groups may experience more serious health effects.";
+    } else if (aqi > 200) {
+        statusText = "Hazardous / Very Unhealthy";
+        badgeBg = "bg-purple-500/20 text-purple-300 border-purple-500/30";
+        hexColor = "#a855f7";
+        advice = "Health alert: everyone may experience more serious health effects. Avoid outdoor physical activities.";
+    }
+
+    elBadge.className = `text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${badgeBg}`;
+    elBadge.innerText = statusText;
+    elTooltipStatus.innerText = statusText;
+    elTooltipBadge.style.backgroundColor = hexColor;
+    elRiskVal.innerText = `${riskPct}%`;
+    elHealthAdvice.innerText = advice;
+
+    document.getElementById('tooltipTemp').innerText = `${Math.floor(Math.random() * 12) + 22}°C`;
+    document.getElementById('tooltipHumidity').innerText = `${Math.floor(Math.random() * 30) + 40}%`;
+    document.getElementById('tooltipWind').innerText = `${(Math.random() * 10 + 5).toFixed(1)} km/h`;
+}
+
+async function openAiAdvisorModal() {
+    const modal = document.getElementById('aiModal');
+    const content = document.getElementById('aiModalContent');
+    const loading = document.getElementById('aiModalLoading');
+    const cityTitle = document.getElementById('aiModalCity');
+
+    cityTitle.innerText = `${currentCity.name}, ${currentCity.country}`;
+    modal.classList.remove('hidden');
+    loading.classList.remove('hidden');
+    content.innerHTML = '';
+
+    const aqi = document.getElementById('aqiValue').innerText;
+    const systemPrompt = "Act as an expert atmospheric scientist and health physician. Provide a concise 2-paragraph analysis covering: 1) Causes for current AQI levels in the specified city, 2) Precise health recommendations for outdoors, masks, and indoor air filtration.";
+    const userQuery = `Provide an atmospheric air quality health assessment for ${currentCity.name}, ${currentCity.country} with a current US AQI of ${aqi}.`;
+
+    try {
+        const apiKey = "";
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+        const payload = {
+            contents: [{ parts: [{ text: userQuery }] }],
+            tools: [{ "google_search": {} }],
+            systemInstruction: { parts: [{ text: systemPrompt }] }
+        };
+
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+        const responseText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        loading.classList.add('hidden');
+        if (responseText) {
+            content.innerHTML = `<p class="text-amber-300 font-semibold mb-2">Live AI Analysis for ${currentCity.name} (AQI ${aqi}):</p><p>${responseText.replace(/\n\n/g, '</p><p class="mt-2">')}</p>`;
+        } else {
+            content.innerHTML = `<p>Unable to generate AI response. Current AQI for ${currentCity.name} is ${aqi}. Please wear protective N95 masks if outdoors for extended periods.</p>`;
+        }
+    } catch (e) {
+        loading.classList.add('hidden');
+        content.innerHTML = `<p>Active AQI in ${currentCity.name} is ${aqi}. Unusually sensitive people should consider limiting prolonged outdoor exertion and keep windows closed during high pollution spikes.</p>`;
+    }
+}
+
+function closeAiAdvisorModal() {
+    document.getElementById('aiModal').classList.add('hidden');
+}
+
+// ====================================================================
+// NEW SPA CODE
+// ====================================================================
+
+const API = {
+    async get(path) { const r = await fetch(path); if(!r.ok) throw new Error(r.status); return r.json(); },
+    status: () => API.get('/api/status'),
+    forecast: (h) => API.get(`/api/forecast/${h}`),
+    analytics: () => API.get('/api/analytics'),
+    causal: () => API.get('/api/causal'),
+    dispatch: () => API.get('/api/dispatch'),
+    runPipeline: (step) => fetch(`/api/pipeline/run?step=${step}`,{method:'POST'}).then(r=>r.json()),
+};
+
+const AQI_SCALE = [[0,'#10b981'],[0.2,'#f59e0b'],[0.4,'#f97316'],[0.6,'#ef4444'],[0.8,'#a855f7'],[1,'#7e0023']];
+
+const PLOT_BASE = {
+    paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(255,255,255,0.02)',
+    font:{family:'Plus Jakarta Sans,sans-serif',color:'#94a3b8'},
+    margin:{l:40,r:20,t:40,b:40},
+    xaxis:{gridcolor:'rgba(255,255,255,0.06)'},
+    yaxis:{gridcolor:'rgba(255,255,255,0.06)'},
+};
+
+// Toast system
+function showToast(title, body='', type='') {
+    const t = document.getElementById('toast');
+    t.querySelector('.toast-title').textContent = title;
+    t.querySelector('.toast-body').textContent = body;
+    t.className = 'show ' + type;
+    setTimeout(() => t.className = '', 4000);
+}
+
+// Router
+const pageLoaders = {};
+
+function navigateTo(page) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+
+    const targetPage = document.getElementById('page-' + page);
+    if (targetPage) targetPage.classList.add('active');
+
+    const targetTab = document.querySelector(`.nav-tab[data-page="${page}"]`);
+    if (targetTab) targetTab.classList.add('active');
+
+    // Lazy load
+    if (!pageLoaders[page]) {
+        pageLoaders[page] = true;
+        switch(page) {
+            case 'globe': loadGlobe(); break;
+            case 'overview': loadOverview(); break;
+            case 'map': loadMap(); break;
+            case 'causal': loadCausal(); break;
+            case 'analytics': loadAnalytics(); break;
+            case 'dispatch': loadDispatch(); break;
+        }
+    }
+}
+
+document.querySelectorAll('.nav-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        navigateTo(tab.dataset.page);
+    });
+});
+
+// Page Loaders
+function loadGlobe() {
+    initGlobe();
+}
+
+async function loadOverview() {
+    try {
+        const data = await API.status();
+        const k = data.kpis || {};
+        document.getElementById('kpiHexes').textContent = k.hexes_monitored ?? '--';
+        document.getElementById('kpiMaxAqi').textContent = k.max_aqi_24h ?? '--';
+        document.getElementById('kpiMeanAqi').textContent = k.mean_aqi_24h ?? '--';
+        document.getElementById('kpiHighZones').textContent = k.high_aqi_zones ?? '--';
+        document.getElementById('kpiCalls').textContent = k.calls_dispatched ?? '--';
+        document.getElementById('kpiMqtt').textContent = k.mqtt_messages ?? '--';
+
+        const pipeline = data.pipeline || {};
+        const stepsList = [
+            {name:'OpenAQ',   done:!!pipeline.openaq,   hint:'OpenAQ ingestion'},
+            {name:'OpenMeteo',done:!!pipeline.openmeteo,hint:'Weather data'},
+            {name:'Graph',    done:!!pipeline.graph,    hint:'Knowledge graph'},
+            {name:'Forecast', done:!!pipeline.forecast, hint:'AQI forecast'},
+            {name:'Enrich',   done:!!pipeline.enriched, hint:'Enriched data'},
+            {name:'Dispatch', done:!!pipeline.dispatch, hint:'Dispatch ready'},
+        ];
+        const container = document.getElementById('pipelineSteps');
+        container.innerHTML = stepsList.map(s => `
+            <div class="section-card p-3 text-center">
+                <div class="text-lg ${s.done?'step-done':'step-pending'}"><i class="fa-solid ${s.done?'fa-circle-check':'fa-circle'}"></i></div>
+                <div class="text-xs font-bold text-white mt-1">${s.name}</div>
+                <div class="text-[9px] text-slate-500 mt-0.5">${s.hint}</div>
+            </div>
+        `).join('');
+    } catch(e) {
+        showToast('Error','Failed to load status data');
+    }
+}
+
+async function loadMap() {
+    const horizon = document.getElementById('mapHorizon').value;
+    try {
+        const r = await API.forecast(horizon);
+        const records = r.data || [];
+
+        // Map: scattermapbox with circle markers colored by AQI
+        const aqiVals = records.map(d => d.aqi);
+        const mapData = [{
+            type: 'scattermapbox',
+            lat: records.map(d => d.lat),
+            lon: records.map(d => d.lon),
+            mode: 'markers',
+            marker: {
+                size: 11,
+                color: aqiVals,
+                colorscale: AQI_SCALE,
+                cmin: 0, cmax: 300,
+                showscale: true,
+                colorbar: {
+                    title: { text: 'AQI', font: { color: '#94a3b8', size: 11 } },
+                    tickfont: { color: '#94a3b8', size: 10 },
+                    bgcolor: 'rgba(7,8,17,0.85)',
+                    bordercolor: 'rgba(255,255,255,0.12)',
+                    borderwidth: 1, thickness: 12, len: 0.65,
+                },
+            },
+            text: records.map(d => `<b>H3: ${d.h3_index}</b><br>AQI: <b>${Math.round(d.aqi)}</b><br>${d.category||''}`),
+            hoverinfo: 'text',
+            hoverlabel: { bgcolor: '#101428', font: { color: '#e2e8f0', size: 11 } },
+        }];
+
+        const mapLayout = {
+            mapbox: {
+                style: 'carto-darkmatter',
+                center: { lat: 18.53, lon: 73.84 },
+                zoom: 10.5,
+            },
+            margin: { r:0, t:0, l:0, b:0 },
+            paper_bgcolor: '#030409',
+            height: 500,
+        };
+
+        Plotly.newPlot('mapPlot', mapData, mapLayout, { responsive: true, displayModeBar: false });
+
+        // Histogram
+        Plotly.newPlot('histogramPlot', [{
+            x: aqiVals, type: 'histogram', nbinsx: 20,
+            marker: { color: '#6366f1', line: { color: '#818cf8', width: 1 } },
+        }], { ...PLOT_BASE, height: 250, margin: { l:30, r:10, t:10, b:30 }, bargap: 0.1 }, { responsive: true, displayModeBar: false });
+
+        // Hotspots table
+        const sorted = [...records].sort((a,b) => b.aqi - a.aqi).slice(0, 10);
+        document.getElementById('hotspotBody').innerHTML = sorted.map((d,i) => {
+            const cat = d.category || (d.aqi > 200 ? 'Hazardous' : d.aqi > 150 ? 'Unhealthy' : d.aqi > 100 ? 'Unhealthy for Sensitive' : d.aqi > 50 ? 'Moderate' : 'Good');
+            const cls = d.aqi > 200 ? 'text-red-400 font-bold' : d.aqi > 150 ? 'text-orange-400' : d.aqi > 100 ? 'text-amber-400' : d.aqi > 50 ? 'text-yellow-400' : 'text-emerald-400';
+            return `<tr><td>${i+1}</td><td class="font-mono text-[10px]">${d.h3_index||'--'}</td><td class="${cls}">${Math.round(d.aqi)}</td><td class="text-[10px]">${cat}</td></tr>`;
+        }).join('');
+
+        document.getElementById('mapHorizon').onchange = () => loadMap();
+        document.getElementById('aqiThreshold').oninput = function() {
+            document.getElementById('aqiThresholdVal').textContent = this.value;
+        };
+        document.getElementById('refreshMap').onclick = () => loadMap();
+    } catch(e) {
+        showToast('Error','Failed to load map data');
+    }
+}
+
+async function loadCausal() {
+    try {
+        const data = await API.causal();
+        document.getElementById('causalATE').textContent = data.total_ate ?? '--';
+
+        const results = data.results || [];
+        const trace = [{
+            y: results.map(s => s.name || s.factor || 'Factor'),
+            x: results.map(s => s.ate || 0),
+            error_x: {
+                type: 'data',
+                symmetric: false,
+                array: results.map(s => s.ci_upper ? s.ci_upper - s.ate : 0.5),
+                arrayminus: results.map(s => s.ci_lower ? s.ate - s.ci_lower : 0.5),
+                color: '#94a3b8',
+            },
+            orientation: 'h', type: 'bar',
+            marker: { color: results.map(s => s.color || '#6366f1') },
+        }];
+
+        Plotly.newPlot('causalPlot', trace, {
+            ...PLOT_BASE, height: 350,
+            margin: { l:120, r:30, t:10, b:30 },
+            xaxis: { ...PLOT_BASE.xaxis, title: { text: 'ATE', font: { color: '#64748b', size: 10 } } },
+            yaxis: { ...PLOT_BASE.yaxis, autorange: 'reversed' },
+            bargap: 0.3,
+        }, { responsive: true, displayModeBar: false });
+    } catch(e) {
+        showToast('Error','Failed to load causal data');
+    }
+}
+
+async function loadAnalytics() {
+    try {
+        const data = await API.analytics();
+        const weather = data.weather_correlation || [];
+
+        // Box plot: AQI by horizon
+        const byH = data.by_horizon || {};
+        const boxTraces = Object.entries(byH).map(([h, vals], i) => ({
+            y: vals.map(v => v.predicted_aqi),
+            type: 'box', name: h,
+            marker: { color: ['#6366f1','#22d3ee','#f59e0b'][i] },
+            boxmean: true,
+        }));
+        if (boxTraces.length) {
+            Plotly.newPlot('boxPlot', boxTraces, { ...PLOT_BASE, height: 230, margin: { l:30, r:10, t:10, b:30 }, showlegend: true, legend: { font: { size: 9 } } }, { responsive: true, displayModeBar: false });
+        }
+
+        // Stacked bar: categories per horizon
+        const catColors = data.category_colors || {};
+        const catOrder = ["Good","Moderate","Unhealthy-Sensitive","Unhealthy","Very Unhealthy","Hazardous"];
+        const barTraces = catOrder.map(cat => ({
+            x: Object.keys(byH),
+            y: Object.values(byH).map(vals => vals.filter(d => d.category === cat).length),
+            name: cat, type: 'bar',
+            marker: { color: catColors[cat] || '#64748b' },
+        }));
+        if (barTraces.length) {
+            Plotly.newPlot('stackedBarPlot', barTraces, { ...PLOT_BASE, height: 230, margin: { l:30, r:10, t:10, b:40 }, barmode: 'stack', showlegend: true, legend: { font: { size: 9 } } }, { responsive: true, displayModeBar: false });
+        }
+
+        // Scatter: wind speed vs AQI
+        if (weather.length) {
+            Plotly.newPlot('scatterWindPlot', [{
+                x: weather.map(d => d.wind_speed_kmh), y: weather.map(d => d.predicted_aqi),
+                mode: 'markers', type: 'scatter',
+                marker: { color: weather.map(d => d.predicted_aqi), colorscale: AQI_SCALE, size: 8, showscale: false },
+            }], { ...PLOT_BASE, height: 230, margin: { l:30, r:10, t:10, b:30 }, xaxis: { ...PLOT_BASE.xaxis, title: { text: 'Wind Speed (km/h)', font: { size: 9 } } }, yaxis: { ...PLOT_BASE.yaxis, title: { text: 'AQI', font: { size: 9 } } } }, { responsive: true, displayModeBar: false });
+
+            // Scatter: temp vs AQI (color=humidity)
+            Plotly.newPlot('scatterTempPlot', [{
+                x: weather.map(d => d.temperature_c), y: weather.map(d => d.predicted_aqi),
+                mode: 'markers', type: 'scatter',
+                marker: {
+                    color: weather.map(d => d.humidity_pct),
+                    colorscale: 'Viridis', size: 8,
+                    showscale: true,
+                    colorbar: { title: { text: 'Humidity %', font: { size: 9 } }, thickness: 10 },
+                },
+            }], { ...PLOT_BASE, height: 230, margin: { l:30, r:60, t:10, b:30 }, xaxis: { ...PLOT_BASE.xaxis, title: { text: 'Temperature (°C)', font: { size: 9 } } }, yaxis: { ...PLOT_BASE.yaxis, title: { text: 'AQI', font: { size: 9 } } } }, { responsive: true, displayModeBar: false });
+        }
+    } catch(e) {
+        showToast('Error','Failed to load analytics data');
+    }
+}
+
+async function loadDispatch() {
+    try {
+        const data = await API.dispatch();
+        const m = data.metrics || {};
+
+        document.getElementById('dispLatency').textContent = (m.avg_latency_ms ?? m.latency ?? '--') + 'ms';
+        document.getElementById('dispCalls').textContent = m.calls_dispatched ?? m.calls ?? '--';
+        document.getElementById('dispMqtt').textContent = m.mqtt_messages_published ?? m.mqtt_messages ?? '--';
+        document.getElementById('dispHexMs').textContent = (m.ms_per_hex ?? '--');
+
+        // Alert table
+        const alerts = data.alerts || [];
+        document.getElementById('alertBody').innerHTML = alerts.map(a => {
+            const aqi = a.aqi || 0;
+            const haz = aqi > 200 ? 'row-hazardous' : '';
+            const clr = aqi > 200 ? 'bg-red-500/20 text-red-300 border-red-500/30' : aqi > 150 ? 'bg-orange-500/20 text-orange-300 border-orange-500/30' : aqi > 100 ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+            return `<tr class="${haz}">
+                <td class="font-bold">${a.facility||'--'}</td>
+                <td>${a.type||'--'}</td>
+                <td><span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${clr}">${Math.round(aqi)}</span></td>
+                <td class="text-[10px]">${a.advisory||'--'}</td>
+                <td>${a.call ? '<i class="fa-solid fa-check text-emerald-400"></i>' : '<i class="fa-solid fa-times text-slate-600"></i>'}</td>
+                <td>${a.mqtt ? '<i class="fa-solid fa-check text-emerald-400"></i>' : '<i class="fa-solid fa-times text-slate-600"></i>'}</td>
+            </tr>`;
+        }).join('');
+
+        // MQTT topics
+        const topics = data.mqtt_topics || [];
+        document.getElementById('mqttTopics').innerHTML = topics.map((t,i) => `
+            <div class="mqtt-card mb-2">
+                <div class="mqtt-header" onclick="this.parentElement.classList.toggle('open')">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-chevron-right text-[10px] text-slate-500 transition-transform mqtt-chevron"></i>
+                        <span class="text-xs font-bold text-white">${t.topic||'Topic '+(i+1)}</span>
+                        <span class="text-[9px] text-slate-500">${t.qos ? 'QoS '+t.qos : ''}</span>
+                    </div>
+                    <span class="text-[10px] text-slate-400">${t.retained ? 'retained' : t.description||''}</span>
+                </div>
+                <div class="mqtt-body">${JSON.stringify(t.payload||{}, null, 2)}</div>
+            </div>
+        `).join('');
+    } catch(e) {
+        showToast('Error','Failed to load dispatch data');
+    }
+}
+
+// Search (moved from global, works with navbar input)
+const searchInput = document.getElementById('citySearchInput');
+const searchResults = document.getElementById('searchResults');
+
+searchInput.addEventListener('input', (e) => {
+    const query = e.target.value.toLowerCase().trim();
+    if (!query) { searchResults.classList.add('hidden'); return; }
+    const matches = GLOBAL_CITIES.filter(c => c.name.toLowerCase().includes(query) || c.country.toLowerCase().includes(query));
+    if (matches.length > 0) {
+        searchResults.innerHTML = matches.map(c => `
+            <div onclick="selectCity('${c.name}'); searchResults.classList.add('hidden'); searchInput.value='';"
+                 class="px-3 py-2 hover:bg-slate-800 cursor-pointer flex items-center justify-between border-b border-white/5 last:border-none">
+                <span class="font-bold text-white">${c.name}</span>
+                <span class="text-slate-400 text-[10px]">${c.country}</span>
+            </div>
+        `).join('');
+        searchResults.classList.remove('hidden');
+    } else {
+        searchResults.classList.add('hidden');
+    }
+});
+
+document.getElementById('btnAiAdvisor').addEventListener('click', openAiAdvisorModal);
+document.getElementById('btnHealthDetails').addEventListener('click', openAiAdvisorModal);
+
+// Init globe on first load since globe is active by default
+document.addEventListener('DOMContentLoaded', () => {
+    loadGlobe();
+});
+</script>
+</body>
+</html>

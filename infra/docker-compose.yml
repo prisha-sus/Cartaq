@@ -1,0 +1,137 @@
+version: "3.9"
+
+# ============================================================
+# Cartaq Urban Air Quality Intelligence Platform
+# Infrastructure: Roles 3 & 4
+#
+# Services:
+#   clickhouse  — columnar OLAP DB for forecast + attribution logs (Role 3)
+#   superset    — Apache Superset BI with deck.gl H3 rendering (Role 3)
+#   postgis     — PostgreSQL + PostGIS for spatial queries (Role 4)
+#   mosquitto   — Eclipse Mosquitto MQTT broker for digital signage (Role 4)
+#
+# Usage:
+#   docker compose up -d
+#   Wait ~60s for all health checks to pass, then:
+#     ClickHouse HTTP UI:  http://localhost:8123/play
+#     Superset:            http://localhost:8088  (admin / admin)
+#     PostGIS:             localhost:5432  (cartaq_user / cartaq_pass)
+#     MQTT broker:         localhost:1883  (cartaq / cartaq_pass)
+# ============================================================
+
+services:
+
+  # ── Role 3: ClickHouse columnar database ───────────────────
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3-alpine
+    container_name: cartaq_clickhouse
+    restart: unless-stopped
+    ports:
+      - "8123:8123"   # HTTP interface  (used by Superset clickhouse-connect)
+      - "9000:9000"   # Native TCP interface (used by clickhouse-driver)
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./clickhouse/init.sql:/docker-entrypoint-initdb.d/00_init.sql:ro
+    environment:
+      CLICKHOUSE_DB: cartaq
+      CLICKHOUSE_USER: cartaq_user
+      CLICKHOUSE_PASSWORD: cartaq_pass
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8123/ping | grep -q 'Ok'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ── Role 3: Apache Superset + deck.gl / MapLibre ────────────
+  superset:
+    image: apache/superset:3.1.3
+    container_name: cartaq_superset
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+    environment:
+      SUPERSET_SECRET_KEY: "cartaq_superset_secret_CHANGE_IN_PROD"
+      PYTHONPATH: /app/pythonpath
+    volumes:
+      - superset_home:/app/superset_home
+      - ./superset/superset_config.py:/app/pythonpath/superset_config.py:ro
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    # Bootstrap on first start, then run gunicorn
+    command: >
+      bash -c "
+        pip install --quiet clickhouse-connect &&
+        superset db upgrade &&
+        superset fab create-admin
+          --username admin
+          --firstname Admin
+          --lastname User
+          --email admin@cartaq.io
+          --password admin 2>/dev/null || true &&
+        superset init &&
+        gunicorn
+          --bind 0.0.0.0:8088
+          --workers 4
+          --timeout 120
+          'superset.app:create_app()'
+      "
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8088/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  # ── Role 4: PostGIS (PostgreSQL + PostGIS) ──────────────────
+  postgis:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: cartaq_postgis
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgis_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: cartaq
+      POSTGRES_USER: cartaq_user
+      POSTGRES_PASSWORD: cartaq_pass
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cartaq_user -d cartaq"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # ── Role 4: Eclipse Mosquitto MQTT broker ───────────────────
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: cartaq_mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"    # MQTT TCP
+      - "9001:9001"    # MQTT over WebSockets (for browser clients / signage)
+    volumes:
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_logs:/mosquitto/log
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/passwd:/mosquitto/config/passwd:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h localhost -p 1883 -t '$$SYS/broker/version' -C 1 -W 3 -u cartaq -P cartaq_pass"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  clickhouse_data:
+  superset_home:
+  postgis_data:
+  mosquitto_data:
+  mosquitto_logs:

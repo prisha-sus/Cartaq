@@ -20,6 +20,7 @@ output/
 # Cache
 .cache/
 .pytest_cache/
+.cache.sqlite
 
 # IDEs and OS files
 .vscode/
